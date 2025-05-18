@@ -1,9 +1,9 @@
 # most of this file is generated with chatgpt help
 import os
-import numpy as np
-import matplotlib.pyplot as plt
+
 import gymnasium as gym
-import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
 import torch.optim as optim
 from rl_exercises.week_4.dqn import DQNAgent, set_seed
 from rl_exercises.week_4.networks import QNetwork
