@@ -9,14 +9,48 @@ from rl_exercises.week_4.dqn import DQNAgent, set_seed
 from rl_exercises.week_4.networks import QNetwork
 
 
+class ExperimentDQNAgent(DQNAgent):
+    """Extended DQN Agent that tracks rewards for experiments"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rewards_history = []
+        self.current_rewards = []
+
+    def train(self, num_frames: int, eval_interval: int = 1000) -> list:
+        """Override train to track rewards"""
+        state, _ = self.env.reset()
+        ep_reward = 0.0
+
+        for frame in range(1, num_frames + 1):
+            action = self.predict_action(state)
+            next_state, reward, done, truncated, _ = self.env.step(action)
+
+            self.buffer.add(state, action, reward, next_state, done or truncated, {})
+            state = next_state
+            ep_reward += reward
+
+            if len(self.buffer) >= self.batch_size:
+                batch = self.buffer.sample(self.batch_size)
+                _ = self.update_agent(batch)
+
+            if done or truncated:
+                state, _ = self.env.reset()
+                self.current_rewards.append(ep_reward)
+                if len(self.current_rewards) >= 10:  # Record average every 10 episodes
+                    self.rewards_history.append(np.mean(self.current_rewards))
+                    self.current_rewards = []
+                ep_reward = 0.0
+
+        return self.rewards_history
+
+
 def run_experiment(env, config, hidden_dim=64, num_frames=10000, seed=42):
     """Run a single experiment with given configuration."""
     set_seed(env, seed)
-    rewards_history = []
-    current_rewards = []
 
-    # Create agent with default network
-    agent = DQNAgent(env, **config)
+    # Create agent with specified configuration
+    agent = ExperimentDQNAgent(env, **config)
 
     # If custom hidden_dim specified, replace the networks
     if hidden_dim != 64:  # Only replace if different from default
@@ -27,34 +61,12 @@ def run_experiment(env, config, hidden_dim=64, num_frames=10000, seed=42):
         agent.target_q.load_state_dict(agent.q.state_dict())
         agent.optimizer = optim.Adam(agent.q.parameters(), lr=config.get("lr", 1e-3))
 
-    state, _ = env.reset()
-    ep_reward = 0.0
-
-    for frame in range(1, num_frames + 1):
-        action = agent.predict_action(state)
-        next_state, reward, done, truncated, _ = env.step(action)
-
-        agent.buffer.add(state, action, reward, next_state, done or truncated, {})
-        state = next_state
-        ep_reward += reward
-
-        if len(agent.buffer) >= agent.batch_size:
-            batch = agent.buffer.sample(agent.batch_size)
-            agent.update_agent(batch)
-
-        if done or truncated:
-            state, _ = env.reset()
-            current_rewards.append(ep_reward)
-            if len(current_rewards) >= 10:  # Record average every 10 episodes
-                rewards_history.append(np.mean(current_rewards))
-                current_rewards = []
-            ep_reward = 0.0
-
-    return rewards_history
+    # Train and return rewards history
+    return agent.train(num_frames)
 
 
 def main():
-    # Create plots directory if it doesn't exist
+    # Ensure plots directory exists
     os.makedirs("plots", exist_ok=True)
 
     # Base configuration
